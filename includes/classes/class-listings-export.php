@@ -1,6 +1,12 @@
 <?php
 namespace Directorist;
 class Listings_Exporter {
+    /**
+     * Export column labels map [ field_key => label ].
+     *
+     * @var array<string, string>
+     */
+    private static $column_labels = [];
 
     // get_prepared_listings_export_file
     public static function get_prepared_listings_export_file() {
@@ -51,7 +57,11 @@ class Listings_Exporter {
 
         foreach ( $listings_data as $index => $row ) {
             if ( $index === 0 ) {
-                $contents .= join( ',', array_keys( $row ) ) . "\n";
+                $headers = [];
+                foreach ( array_keys( $row ) as $column_key ) {
+                    $headers[] = self::get_export_column_header_label( $column_key );
+                }
+                $contents .= join( ',', $headers ) . "\n";
             }
 
             $row_content = '';
@@ -83,6 +93,11 @@ class Listings_Exporter {
     // get_listings_data
     public static function get_listings_data() {
         $listings_data = [];
+        self::$column_labels = [
+            'id'           => 'ID',
+            'directory'    => 'Directory',
+            'publish_date' => 'Publish Date',
+        ];
 
         $listings = new \WP_Query(
             apply_filters(
@@ -142,6 +157,9 @@ class Listings_Exporter {
 
                             if ( self::$verify( $field_args ) ) {
                                 $row = self::$update_data( $row, $field_key, $field_args );
+                                if ( ! empty( $field_args['field_key'] ) && ! empty( $field_args['label'] ) ) {
+                                    self::$column_labels[ $field_args['field_key'] ] = (string) $field_args['label'];
+                                }
                                 $row = apply_filters( 'directorist_listings_export_submission_form_fields_row', $row, $field_key, $field_args, $field_map_key );
                                 break;
                             }
@@ -429,5 +447,22 @@ class Listings_Exporter {
         }
 
         return $data;
+    }
+
+    /**
+     * Get CSV header label for a column key.
+     *
+     * Uses user-defined field labels when available, otherwise falls back to
+     * the original key to preserve backward compatibility.
+     *
+     * @since 8.0.0
+     *
+     * @param string $column_key
+     * @return string
+     */
+    private static function get_export_column_header_label( $column_key ) {
+        $label = isset( self::$column_labels[ $column_key ] ) ? (string) self::$column_labels[ $column_key ] : (string) $column_key;
+        $label = str_replace( '"', "'", $label );
+        return '"' . $label . '"';
     }
 }

@@ -39,9 +39,9 @@ class Directorist_Single_Listing {
 
     private function __construct( $listing_id = 0 ) {
         if ( $listing_id && is_int( $listing_id ) ) {
-            $this->id = $listing_id;
+            $this->id = (int) $listing_id;
         } else {
-            $this->id = get_the_ID();
+            $this->id = (int) get_the_ID();
         }
 
         $this->prepare_data();
@@ -64,10 +64,10 @@ class Directorist_Single_Listing {
     }
 
     public function prepare_data() {
-        $this->author_id            = get_post_field( 'post_author', $this->id );
+        $this->author_id            = (int) get_post_field( 'post_author', $this->id );
         $this->post                 = get_post( $this->id );
-        $this->type                 = $this->get_directory_type_id();
-        $this->header_data          = get_term_meta( $this->type, 'single_listing_header', true );
+        $this->type                 = (int) $this->get_directory_type_id();
+        $this->header_data          = directorist_single_listing_header( $this->type, [ 'listing_id' => $this->id, 'listing_owner_id' => $this->author_id, 'directory_type_id' => $this->type ] );
         $this->content_data         = $this->build_content_data();
         $this->fm_plan              = get_post_meta( $this->id, '_fm_plans', true );
         $this->price_range          = get_post_meta( $this->id, '_price_range', true );
@@ -77,8 +77,14 @@ class Directorist_Single_Listing {
 
     public function build_content_data() {
         $content_data           = [];
-        $single_fields          = get_term_meta( $this->type, 'single_listings_contents', true );
-        $submission_form_fields = get_term_meta( $this->type, 'submission_form_fields', true );
+        $single_fields          = directorist_single_listings_contents( 
+            $this->type,
+            [
+                'listing_id'        => (int) $this->id,
+                'listing_owner_id'  => (int) $this->author_id,
+            ]
+        );
+        $submission_form_fields = directorist_submission_form_fields_raw( $this->type );
 
         if ( ! empty( $single_fields['fields'] ) ) {
             foreach ( $single_fields['fields'] as $key => $value ) {
@@ -679,6 +685,8 @@ class Directorist_Single_Listing {
             array_unshift( $data['images'], $preview_img );
         }
 
+        $data['images'] = apply_filters( 'directorist_single_listing_thumbnails', $data['images'], $listing_id );
+
         if ( count( $data['images'] ) < 1 ) {
             $data['images'][] = [
                 'alt' => $listing_title,
@@ -692,7 +700,6 @@ class Directorist_Single_Listing {
     }
 
     public function slider_template() {
-
         $slider = $this->listing_header( 'slider', 'slider-placeholder' );
 
         if ( ! $slider ) {
@@ -703,7 +710,6 @@ class Directorist_Single_Listing {
     }
 
     public function slider_field_template( $slider = null ) {
-
         $args = [
             'listing'    => $this,
             'has_slider' => true,
@@ -725,26 +731,56 @@ class Directorist_Single_Listing {
     }
 
     public function has_badge( $data ) {
-        if ( $data['new_badge'] || $data['featured_badge'] || $data['popular_badge'] ) {
-            if ( Helper::badge_exists( $this->id ) ) {
-                return true;
+        return ! empty( $this->matched_badges( $data ) );
+    }
+
+    public function matched_badges( $data ) {
+        $badge_keys = [];
+
+        if ( ! empty( $data['new_badge'] ) ) {
+            $badge_keys[] = 'new';
+        }
+
+        if ( ! empty( $data['featured_badge'] ) ) {
+            $badge_keys[] = 'featured';
+        }
+
+        if ( ! empty( $data['popular_badge'] ) ) {
+            $badge_keys[] = 'popular';
+        }
+
+        foreach ( array_keys( Helper::custom_badge_definitions() ) as $custom_badge_key ) {
+            if ( ! empty( $data[ $custom_badge_key ] ) && $this->builder_toggle_enabled( $data[ $custom_badge_key ] ) ) {
+                $badge_keys[] = $custom_badge_key;
             }
         }
 
-        return false;
+        return Helper::matched_badges( $this->id, $badge_keys );
+    }
+
+    private function builder_toggle_enabled( $value ) {
+        if ( is_bool( $value ) ) {
+            return $value;
+        }
+
+        if ( is_numeric( $value ) ) {
+            return (bool) (int) $value;
+        }
+
+        return in_array( strtolower( trim( (string) $value ) ), [ '1', 'true', 'yes', 'on' ], true );
     }
 
     public function display_new_badge( $data ) {
-        return $data['new_badge'] && Helper::is_new( $this->id );
+        return $data['new_badge'] && Helper::display_badge( $this->id, 'new' );
     }
 
     public function display_featured_badge( $data ) {
         $featured_badge = ! empty( $data['featured_badge'] ) ? $data['featured_badge'] : '';
-        return $featured_badge && Helper::is_featured( $this->id );
+        return $featured_badge && Helper::display_badge( $this->id, 'featured' );
     }
 
     public function display_popular_badge( $data ) {
-        return $data['popular_badge'] && Helper::is_popular( $this->id );
+        return $data['popular_badge'] && Helper::display_badge( $this->id, 'popular' );
     }
 
     public function has_price_range() {
@@ -1120,23 +1156,22 @@ class Directorist_Single_Listing {
     }
 
     public function header_template() {
-
+        
         $display_title     = $this->listing_header( 'title', 'listing-title-placeholder' );
         $args = [
-            'listing'           => $this,
-            'use_listing_title' => true,
-            'section_title'     => '',
-            'section_icon'      => '',
-            'display_title'     => $display_title,
-            'display_tagline'   => ! empty( $display_title['enable_tagline'] ) ? $display_title['enable_tagline'] : false,
-            'display_content'   => false,
+                'listing'           => $this,
+                'use_listing_title' => true,
+                'section_title'     => '',
+                'section_icon'      => '',
+                'display_title'     => $display_title,
+                'display_tagline'   => ! empty( $display_title['enable_tagline'] ) ? $display_title['enable_tagline'] : false,
+                'display_content'   => false,
         ];
 
         return Helper::get_template( 'single/header', $args );
     }
 
     public function render_shortcode_single_listing() {
-
         if ( ! is_singular( ATBDP_POST_TYPE ) ) {
             return;
         }
@@ -1353,11 +1388,32 @@ class Directorist_Single_Listing {
         $display_favorite_badge_map = get_directorist_option( 'display_favorite_badge_map', 1 );
 
         $listing_prv_img = directorist_get_listing_preview_image( $id );
-        $default_image = get_directorist_option( 'default_preview_image', DIRECTORIST_ASSETS . 'images/grid.jpg' );
-        $listing_prv_imgurl = ! empty( $listing_prv_img ) ? atbdp_get_image_source( $listing_prv_img, 'small' ) : '';
-        $listing_prv_imgurl = atbdp_image_cropping( $listing_prv_img, 150, 150, true, 100 )['url'];
-        $img_url = ! empty( $listing_prv_imgurl ) ? $listing_prv_imgurl : $default_image;
-        $image = "<figure><img src=" . $img_url . " /></figure>";
+        $listing_img     = directorist_get_listing_gallery_images( $id );
+        $listing_type    = directorist_get_listing_directory( $id );
+        $default_image   = Helper::default_preview_image_src( $listing_type );
+        $listing_title   = get_the_title( $id );
+        $img_url         = '';
+
+        if ( ! empty( $listing_prv_img ) ) {
+            $cropped_image = atbdp_image_cropping( $listing_prv_img, 150, 150, true, 100 );
+            $img_url = ! empty( $cropped_image['url'] ) ? $cropped_image['url'] : atbdp_get_image_source( $listing_prv_img, 'small' );
+        }
+
+        if ( empty( $img_url ) && ! empty( $listing_img[0] ) ) {
+            $gallery_image_id = (int) $listing_img[0];
+            $cropped_image = atbdp_image_cropping( $gallery_image_id, 150, 150, true, 100 );
+            $img_url = ! empty( $cropped_image['url'] ) ? $cropped_image['url'] : atbdp_get_image_source( $gallery_image_id, 'small' );
+        }
+
+        if ( empty( $img_url ) ) {
+            $img_url = $default_image;
+        }
+
+        $image = sprintf(
+            "<figure><img src='%s' alt='%s' /></figure>",
+            esc_url( $img_url ),
+            esc_attr( $listing_title )
+        );
         if ( empty( $display_image_map ) ) {
             $image = '';
         }
@@ -1534,12 +1590,13 @@ class Directorist_Single_Listing {
         $user_pro_pic   = get_user_meta( $this->author_id, 'pro_pic', true );
         $u_pro_pic      = ! empty( $u_pro_pic ) ? wp_get_attachment_image_src( $u_pro_pic, 'thumbnail' ) : '';
         $author_data    = get_userdata( $this->author_id );
+        $directory_type = ATBDP_Permalink::get_listing_directory_type_slug( $this->id );
 
         $author_first_name = ! empty( $author_data ) ?  $author_data->first_name : '';
         $author_last_name  = ! empty( $author_data ) ?  $author_data->last_name : '';
 
         $args = [
-            'author_link'      => ATBDP_Permalink::get_user_profile_page_link( $this->author_id ),
+            'author_link'      => ATBDP_Permalink::get_user_profile_page_link( $this->author_id, $directory_type ),
             'u_pro_pic'        => $u_pro_pic,
             'avatar_img'       => get_avatar( $this->author_id, apply_filters( 'atbdp_avatar_size', 32 ) ),
             'author_full_name' => $author_first_name . ' ' . $author_last_name,

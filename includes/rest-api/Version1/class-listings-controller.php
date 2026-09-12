@@ -10,10 +10,12 @@ namespace Directorist\Rest_Api\Controllers\Version1;
 
 defined( 'ABSPATH' ) || exit;
 
-use WP_Error;
+use WP_REST_Request;
 use WP_Query;
 use WP_REST_Server;
+use WP_Error;
 use Directorist\Helper;
+use Directorist\Repositories\ListingRepository;
 
 /**
  * Listings controller class.
@@ -82,6 +84,76 @@ class Listings_Controller extends Posts_Controller {
                 'schema' => array( $this, 'get_public_item_schema' ),
             )
         );
+
+        register_rest_route(
+            $this->namespace,
+            '/' . $this->rest_base . '/(?P<id>[\d]+)/update-status',
+            [
+                'args'   => [
+                    'id' => [
+                        'description' => __( 'Unique identifier for the resource.', 'directorist' ),
+                        'type'        => 'integer',
+                    ],
+                    'status' => [
+                        'description' => __( 'The status of the listing.', 'directorist' ),
+                        'type'        => 'string',
+                        'enum'        => [ 'publish', 'private' ],
+                    ],
+                ],
+                [
+                    'methods'             => WP_REST_Server::CREATABLE,
+                    'callback'            => [ $this, 'update_status' ],
+                    'permission_callback' => [ $this, 'update_status_permissions_check' ],
+                    'args'                => [
+                        'context' => $this->get_context_param(
+                            [
+                                'default' => 'view',
+                            ]
+                        ),
+                    ],
+                ],
+            ]
+        );
+    }
+
+    /**
+     * Check if a given request has access to update a listing status.
+     *
+     * @param WP_REST_Request $request Full details about the request.
+     * @return bool|WP_Error
+     */
+    public function update_status_permissions_check( WP_REST_Request $request ) {
+        $listing = $this->get_status_update_listing( (int) $request->get_param( 'id' ) );
+
+        if ( is_wp_error( $listing ) ) {
+            return $listing;
+        }
+
+        if ( ! current_user_can( 'edit_post', $listing->ID ) ) {
+            return new WP_Error(
+                'directorist_rest_cannot_edit',
+                __( 'Sorry, you are not allowed to edit this resource.', 'directorist' ),
+                [ 'status' => rest_authorization_required_code() ]
+            );
+        }
+
+        $status = $this->validate_status_for_update( $request->get_param( 'status' ) );
+
+        if ( is_wp_error( $status ) ) {
+            return $status;
+        }
+
+        $post_type_object = get_post_type_object( $this->post_type );
+
+        if ( ! $post_type_object || ! current_user_can( $post_type_object->cap->publish_posts ) ) {
+            return new WP_Error(
+                'directorist_rest_cannot_publish',
+                __( 'Sorry, you are not allowed to change this listing status.', 'directorist' ),
+                [ 'status' => rest_authorization_required_code() ]
+            );
+        }
+
+        return true;
     }
 
     /**
@@ -519,6 +591,73 @@ class Listings_Controller extends Posts_Controller {
         return $response;
     }
 
+    public function update_status( WP_REST_Request $request ) {
+        $id     = (int) $request->get_param( 'id' );
+        $status = $this->validate_status_for_update( $request->get_param( 'status' ) );
+
+        if ( is_wp_error( $status ) ) {
+            return $status;
+        }
+
+        $listing = $this->get_status_update_listing( $id );
+
+        if ( is_wp_error( $listing ) ) {
+            return $listing;
+        }
+
+        do_action( 'directorist_before_update_listing_status', $id, $status );
+
+        $repository = new ListingRepository();
+
+        $repository->update_listing_status( $id, $status );
+
+        return rest_ensure_response(
+            [
+                'message' => esc_html__( 'The listing status was updated successfully', 'directorist-pricing-plans' )
+            ]
+        );
+    }
+
+    /**
+     * Get a listing for status update requests.
+     *
+     * @param int $id Listing ID.
+     * @return \WP_Post|WP_Error
+     */
+    protected function get_status_update_listing( int $id ) {
+        $listing = get_post( $id );
+
+        if ( ! $listing || $this->post_type !== $listing->post_type ) {
+            return new WP_Error(
+                'directorist_rest_invalid_listing_id',
+                __( 'Invalid listing ID.', 'directorist' ),
+                [ 'status' => 404 ]
+            );
+        }
+
+        return $listing;
+    }
+
+    /**
+     * Validate listing status update value.
+     *
+     * @param string $status Listing status.
+     * @return string|WP_Error
+     */
+    protected function validate_status_for_update( $status ) {
+        $status = is_string( $status ) ? sanitize_key( $status ) : '';
+
+        if ( ! in_array( $status, [ 'publish', 'private' ], true ) ) {
+            return new WP_Error(
+                'directorist_rest_invalid_listing_status',
+                __( 'Invalid listing status.', 'directorist' ),
+                [ 'status' => 400 ]
+            );
+        }
+
+        return $status;
+    }
+
     /**
      * Prepare a single listings output for response.
      *
@@ -689,10 +828,10 @@ class Listings_Controller extends Posts_Controller {
                     $base_data['featured'] = (bool) get_post_meta( $listing->ID, '_featured', true );
                     break;
                 case 'new':
-                    $base_data['new'] = (bool) Helper::is_new( $listing->ID );
+                    $base_data['new'] = (bool) Helper::display_badge( $listing->ID, 'new' );
                     break;
                 case 'popular':
-                    $base_data['popular'] = (bool) Helper::is_popular( $listing->ID );
+                    $base_data['popular'] = (bool) Helper::display_badge( $listing->ID, 'popular' );
                     break;
                 case 'status':
                     // TODO: Status has been migrated, remove related code.

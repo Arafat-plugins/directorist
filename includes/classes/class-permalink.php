@@ -33,12 +33,26 @@ if ( ! class_exists( 'ATBDP_Permalink' ) ) :
                 $permalink = get_the_permalink( $post_id );
             }
 
+            $directory_slug = self::get_listing_directory_type_slug( $post_id );
+
+            $permalink = str_replace( '%' . ATBDP_DIRECTORY_TYPE . '%', $directory_slug, $permalink );
+
+            return $permalink;
+        }
+
+        /**
+         * Get the directory type slug for a listing.
+         *
+         * @param int $post_id Listing ID.
+         * @return string
+         */
+        public static function get_listing_directory_type_slug( $post_id = 0 ) {
             $directory_slug = '';
             $directory_id   = directorist_get_listing_directory( $post_id );
 
             if ( $directory_id ) {
                 $directory_term = get_term( $directory_id, ATBDP_DIRECTORY_TYPE );
-                $directory_slug = $directory_term ? $directory_term->slug : '';
+                $directory_slug = ( $directory_term && ! is_wp_error( $directory_term ) ) ? $directory_term->slug : '';
             }
 
             if ( empty( $directory_slug ) ) {
@@ -49,9 +63,7 @@ if ( ! class_exists( 'ATBDP_Permalink' ) ) :
                 }
             }
 
-            $permalink = str_replace( '%' . ATBDP_DIRECTORY_TYPE . '%', $directory_slug, $permalink );
-
-            return $permalink;
+            return $directory_slug;
         }
 
         public static function get_listing_slug() {
@@ -438,6 +450,13 @@ if ( ! class_exists( 'ATBDP_Permalink' ) ) :
          * @return   string             Term link.
          */
         public static function atbdp_get_category_page( $term, $directory_type = '' ) {
+            if ( ! $term || is_wp_error( $term ) || empty( $term->slug ) ) {
+                $page_id = get_directorist_option( 'single_category_page' );
+                $link    = $page_id ? get_permalink( $page_id ) : '/';
+
+                return apply_filters( 'atbdp_single_category', $link, $page_id, $term, $directory_type );
+            }
+
             if ( directorist_is_archive_template_enabled() ) {
                 $page_id = 0;
                 $link    = get_term_link( $term );
@@ -492,6 +511,13 @@ if ( ! class_exists( 'ATBDP_Permalink' ) ) :
          * @return   string             Term link.
          */
         public static function atbdp_get_location_page( $term, $directory_type = '' ) {
+            if ( ! $term || is_wp_error( $term ) || empty( $term->slug ) ) {
+                $page_id = get_directorist_option( 'single_location_page' );
+                $link    = $page_id ? get_permalink( $page_id ) : '/';
+
+                return apply_filters( 'atbdp_single_location', $link, $page_id, $term, $directory_type );
+            }
+
             if ( directorist_is_archive_template_enabled() ) {
                 $page_id = 0;
                 $link    = get_term_link( $term );
@@ -545,6 +571,13 @@ if ( ! class_exists( 'ATBDP_Permalink' ) ) :
          * @return   string             Term link.
          */
         public static function atbdp_get_tag_page( $term, $directory_type = '' ) {
+            if ( ! $term || is_wp_error( $term ) || empty( $term->slug ) ) {
+                $page_id = get_directorist_option( 'single_tag_page' );
+                $link    = $page_id ? get_permalink( $page_id ) : '/';
+
+                return apply_filters( 'atbdp_single_tag', $link, $page_id, $term, $directory_type );
+            }
+
             if ( directorist_is_archive_template_enabled() ) {
                 $page_id = 0;
                 $link    = get_term_link( $term );

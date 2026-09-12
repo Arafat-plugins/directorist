@@ -93,7 +93,9 @@ $gallery_crop_height = get_directorist_option('gallery_crop_height', '580') . 'p
         --directorist-color-featured-badge: <?php echo esc_attr( $featured_badge_color ); ?>;
         --directorist-color-popular-badge: <?php echo esc_attr( $popular_badge_color ); ?>;
         --directorist-color-new-badge: <?php echo esc_attr( $new_badge_color ); ?>;
-
+        --directorist-color-featured-badge: <?php echo esc_attr( $featured_badge_color ); ?>;
+        --directorist-color-featured-badge-rgb: <?php echo esc_attr( directorist_hex_to_rgb( $featured_badge_color ) ); ?>;
+        
         /* Map marker Color */
         --directorist-color-marker-shape: <?php echo esc_attr( $marker_shape_color ); ?>;
         --directorist-color-marker-icon: <?php echo esc_attr( $marker_icon_color ); ?>;
@@ -225,6 +227,132 @@ $gallery_crop_height = get_directorist_option('gallery_crop_height', '580') . 'p
     .default-ad-search .submit_btn .btn-default:hover,
     .atbdp_login_form_shortcode #loginform p input[type="submit"]:hover, .default-ad-search .submit_btn .btn-primary:hover, .directorist-content-active .widget.atbd_widget .directorist .btn:hover, .atbd-add-payment-method form .atbd-save-card:hover, .directorist-content-active .widget.atbd_widget .atbd_author_info_widget .btn:hover {
         border-color: var(--directorist-color-primary);
+    }
+
+    /*
+        Badge Colors
+          - Badge Open
+          - Badge Closed
+          - Badge Featured
+          - Badge Popular
+          - Badge New
+    */
+    /* Badge Open */
+    .atbd_bg-success i::after,
+    .atbd_content_active #directorist.atbd_wrapper .atbd_badge.atbd_badge_open i::after,
+    .atbd_content_active .widget.atbd_widget[id^='bd'] .atbd_badge.atbd_badge_open i::after,
+    .atbd_content_active .widget.atbd_widget[id^='dcl'] .atbd_badge.atbd_badge_open i::after,
+    .atbd_content_active #directorist.atbd_wrapper .widget.atbd_widget .atbd_badge.atbd_badge_open i::after, .directorist-badge-open {
+        background: var(--directorist-color-open-badge) !important;
+    }
+
+    /* Badge Closed */
+    .atbd_bg-danger i::after,
+    .atbd_content_active #directorist.atbd_wrapper .atbd_give_review_area #atbd_up_preview .atbd_up_prev .rmrf:hover i::after,
+    .atbd_content_active #directorist.atbd_wrapper .atbd_badge.atbd_badge_close i::after,
+    .atbd_content_active .widget.atbd_widget[id^='bd'] .atbd_badge.atbd_badge_close i::after,
+    .atbd_content_active .widget.atbd_widget[id^='dcl'] .atbd_badge.atbd_badge_close i::after,
+    .atbd_content_active #directorist.atbd_wrapper .widget.atbd_widget .atbd_badge.atbd_badge_close i::after, .directorist-badge-close, .directorist-badge.directorist-badge-danger   {
+        background: var(--directorist-color-closed-badge) !important;
+    }
+
+    /* Badge Featured */
+    .atbd_bg-badge-feature i::after,
+    .atbd_content_active #directorist.atbd_wrapper .atbd_badge.atbd_badge_featured i::after,
+    .atbd_content_active .widget.atbd_widget[id^='bd'] .atbd_badge.atbd_badge_featured i::after,
+    .atbd_content_active .widget.atbd_widget[id^='dcl'] .atbd_badge.atbd_badge_featured i::after,
+    .atbd_content_active #directorist.atbd_wrapper .widget.atbd_widget .atbd_badge.atbd_badge_featured i::after,
+    .directorist-listing-single .directorist-badge.directorist-badge-featured i::after {
+        background: var(--directorist-badge-icon-color, var(--directorist-color-featured-badge)) !important;
+    }
+
+    /* Badge Popular */
+    .atbd_bg-badge-popular i::after,
+    .atbd_content_active #directorist.atbd_wrapper .atbd_badge.atbd_badge_popular i::after,
+    .atbd_content_active .widget.atbd_widget[id^='bd'] .atbd_badge.atbd_badge_popular i::after,
+    .atbd_content_active .widget.atbd_widget[id^='dcl'] .atbd_badge.atbd_badge_popular i::after,
+    .atbd_content_active #directorist.atbd_wrapper .widget.atbd_widget .atbd_badge.atbd_badge_popular i::after, .directorist-listing-single .directorist-badge.directorist-badge-popular i::after {
+        background: var(--directorist-badge-icon-color, var(--directorist-color-popular-badge)) !important;
+    }
+
+    /* Badge New */
+    .atbd_content_active #directorist.atbd_wrapper .atbd_badge.atbd_badge_new {
+        background: var(--directorist-color-new-badge) !important;
+    }
+
+    .directorist-listing-single .directorist-badge.directorist-badge-new i::after {
+        background: var(--directorist-badge-icon-color, var(--directorist-color-new-badge)) !important;
+    }
+
+    .directorist-badge.directorist-badge--only-text,
+    .directorist-badge.directorist-badge--icon-only {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        background-color: var(--directorist-badge-bg, currentColor);
+        border: 1px solid var(--directorist-badge-border, currentColor);
+        border-radius: 999px;
+        box-sizing: border-box;
+        color: var(--directorist-badge-color, var(--directorist-color-white));
+        font-weight: 500;
+        line-height: 1;
+        text-transform: none;
+        white-space: nowrap;
+    }
+
+    .directorist-listing-card .directorist-badge.directorist-badge--only-text,
+    .directorist-listing-list .directorist-badge.directorist-badge--only-text,
+    .directorist-badge.directorist-badge--only-text {
+        gap: 6px;
+        background-color: var(--directorist-badge-bg, currentColor);
+        border-color: var(--directorist-badge-border, currentColor);
+        color: var(--directorist-badge-color, var(--directorist-color-white));
+        width: auto;
+        max-width: none;
+        min-width: 34px;
+        min-height: 24px;
+        flex: 0 1 auto;
+        padding: 4px 10px;
+        font-size: 12px;
+        --directorist-badge-icon-size: 13px;
+    }
+
+    .directorist-listing-card .directorist-badge.directorist-badge--icon-only,
+    .directorist-listing-list .directorist-badge.directorist-badge--icon-only,
+    .directorist-info-item-badges .directorist-badge.directorist-badge--icon-only,
+    .directorist-badge.directorist-badge--icon-only {
+        background-color: var(--directorist-badge-bg, currentColor);
+        border-color: var(--directorist-badge-border, currentColor);
+        color: var(--directorist-badge-color, var(--directorist-color-white));
+        width: 28px;
+        min-width: 28px;
+        max-width: 28px;
+        height: 28px;
+        min-height: 28px;
+        max-height: 28px;
+        flex: 0 0 28px;
+        padding: 0;
+        font-size: 14px;
+        --directorist-badge-icon-size: 14px;
+    }
+
+    .directorist-badge .directorist-badge-tooltip {
+        color: var(--directorist-badge-tooltip-color, var(--directorist-color-white));
+        background-color: var(--directorist-badge-tooltip-bg, var(--directorist-color-dark));
+        text-transform: none;
+    }
+
+    .directorist-badge .directorist-badge-tooltip__featured {
+        background-color: var(--directorist-badge-tooltip-bg, var(--directorist-color-featured-badge));
+    }
+
+    .directorist-badge .directorist-badge-tooltip__new {
+        background-color: var(--directorist-badge-tooltip-bg, var(--directorist-color-new-badge));
+    }
+
+    .directorist-badge .directorist-badge-tooltip__popular {
+        background-color: var(--directorist-badge-tooltip-bg, var(--directorist-color-popular-badge));
     }
 
     /*

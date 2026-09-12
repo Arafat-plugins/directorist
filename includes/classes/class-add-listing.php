@@ -15,6 +15,7 @@ defined( 'ABSPATH' ) || die( 'Direct access is not allowed.' );
 
 use Directorist\Helper;
 use Directorist\Fields\Fields;
+use Directorist\Fields\Conditional_Logic;
 
 if ( ! class_exists( 'ATBDP_Add_Listing' ) ) :
 
@@ -257,7 +258,9 @@ if ( ! class_exists( 'ATBDP_Add_Listing' ) ) :
                         continue;
                     }
 
-                    // Removed: should_ignore_category_custom_field check (assign_to feature removed)
+                    if ( self::should_ignore_conditional_logic_field( $field, $posted_data ) ) {
+                        continue;
+                    }
 
                     switch ( $field->get_internal_key() ) {
                         case 'title':
@@ -469,33 +472,9 @@ if ( ! class_exists( 'ATBDP_Add_Listing' ) ) :
                     $data['redirect_url'] = add_query_arg( 'notice', true, $data['redirect_url'] );
                 }
 
-                $is_listing_featured = ( ! empty( $posted_data['listing_type'] ) && ( 'featured' === $posted_data['listing_type'] ) );
-                $should_monetize     = ( directorist_is_monetization_enabled() && directorist_is_featured_listing_enabled() && $is_listing_featured );
-
-                if ( $should_monetize && ! is_fee_manager_active() ) {
-                    $payment_status            = Helper::get_listing_payment_status( $listing_id );
-                    $rejectable_payment_status = [ 'failed', 'cancelled', 'refunded' ];
-
-                    if ( empty( $payment_status ) || in_array( $payment_status, $rejectable_payment_status, true ) ) {
-                        $data['redirect_url'] = ATBDP_Permalink::get_checkout_page_link( $listing_id );
-                        $data['need_payment'] = true;
-
-                        wp_update_post(
-                            [
-                                'ID'          => $listing_id,
-                                'post_status' => 'pending',
-                            ]
-                        );
-                    }
-                }
-
                 $data['success']     = true;
                 $data['success_msg'] = __( 'Your listing submission is completed! Redirecting...', 'directorist' );
                 $data['preview_url'] = $permalink;
-
-                if ( ! empty( $data['need_payment'] ) && $data['need_payment'] === true ) {
-                    $data['success_msg'] = __( 'Payment required! Redirecting to checkout...', 'directorist' );
-                }
 
                 $data['preview_mode'] = $preview_enable;
 
@@ -511,14 +490,15 @@ if ( ! class_exists( 'ATBDP_Add_Listing' ) ) :
                     $data['redirect_url'] = Helper::escape_query_strings_from_url( $posted_data['redirect_url'] );
                 }
 
-                $data['redirect_url'] = urlencode( $data['redirect_url'] );
+                $data = apply_filters( 'directorist_ajax_listing_submission_response', $data, $_REQUEST );
 
-                $data = apply_filters( 'directorist_ajax_listing_submission_response', $data );
+                do_action( 'directorist_ajax_after_request_handling', [ 'params' => $posted_data, 'request' => $_REQUEST, 'response' => $data ] );
 
-                do_action( 'directorist_ajax_after_request_handling', [ 'params' => $posted_data,  'response' => $data ] );
+                if ( ! empty( $data['need_payment'] ) && $data['need_payment'] === true ) {
+                    $data['success_msg'] = __( 'Payment required! Redirecting to checkout...', 'directorist' );
+                }
 
                 wp_send_json( apply_filters( 'atbdp_listing_form_submission_info', $data ) );
-
             } catch ( Exception $e ) {
                 return wp_send_json(
                     [
@@ -909,10 +889,18 @@ if ( ! class_exists( 'ATBDP_Add_Listing' ) ) :
 
         // Removed: should_ignore_category_custom_field method (assign_to feature removed)
 
+        public static function should_ignore_conditional_logic_field( $field, $posted_data ) {
+            return ! Conditional_Logic::should_show_field( $field->get_props(), $posted_data );
+        }
+
         public static function validate_field( $field, $posted_data ) {
             $should_validate = (bool) apply_filters( 'atbdp_add_listing_form_validation_logic', true, $field->get_props(), $posted_data );
 
             // Removed: should_ignore_category_custom_field check (assign_to feature removed)
+
+            if ( self::should_ignore_conditional_logic_field( $field, $posted_data ) ) {
+                $should_validate = false;
+            }
 
             if ( ! $should_validate ) {
                 return [

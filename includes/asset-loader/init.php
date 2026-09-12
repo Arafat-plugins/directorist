@@ -7,9 +7,9 @@
 
 namespace Directorist\Asset_Loader;
 
-if ( ! defined( 'ABSPATH' ) ) {
-    exit;
-}
+defined( 'ABSPATH' ) || exit;
+
+use Directorist\Utils\Enqueue\Enqueue;
 
 class Asset_Loader {
     /**
@@ -137,6 +137,21 @@ class Asset_Loader {
                 wp_enqueue_script( 'directorist-select2-script' );
                 wp_enqueue_script( 'directorist-formgent-integration' );
                 wp_enqueue_style( 'directorist-formgent-integration-style' );
+                Enqueue::style( 'directorist/frontend', 'build/css/public/app', ['wp-components'] );
+                Enqueue::script( 'directorist-listing-owner-dashboard', 'build/js/react/frontend/listing-owner-dashboard' );
+
+                $currency = directorist_get_currency();
+
+                wp_localize_script(
+                    'directorist-listing-owner-dashboard',
+                    'directorist_admin_order',
+                    [
+                        'checkout_page_url' => get_permalink( get_directorist_option( 'checkout_page', 0 ) ),
+                        'symbol_position'   => directorist_get_currency_position(),
+                        'currency'          => $currency,
+                        'symbol'            => atbdp_currency_symbol( $currency ),
+                    ]
+                );
                 break;
 
             // All Authors
@@ -242,7 +257,7 @@ class Asset_Loader {
      *
      * @return void
      */
-    public static function admin_scripts() {
+    public static function admin_scripts( string $hook_suffix ) {
 
         if ( Helper::is_admin_page( 'builder-archive' ) ) {
             wp_enqueue_style( 'directorist-unicons' );
@@ -258,9 +273,11 @@ class Asset_Loader {
             wp_enqueue_script( 'wp-tinymce' );
             wp_enqueue_script( 'wp-media' );
             wp_enqueue_media();
+            do_action( 'directorist_builder_edit_assets_enqueued', $hook_suffix );
         } elseif ( Helper::is_admin_page( 'settings' ) ) {
             wp_enqueue_style( 'directorist-admin-style' );
             wp_enqueue_style( 'directorist-unicons' );
+            wp_enqueue_script( 'directorist-icon-picker' );
             wp_enqueue_script( 'directorist-settings-manager' );
             wp_enqueue_media();
         } elseif ( Helper::is_admin_page( 'extensions' ) ) {
@@ -295,6 +312,8 @@ class Asset_Loader {
             wp_enqueue_style( 'directorist-admin-style' );
             wp_enqueue_script( 'directorist-admin-script' );
         } elseif ( Helper::is_admin_page( 'add_listing' ) ) {
+            global $pagenow;
+
             wp_enqueue_style( 'directorist-admin-style' );
             wp_enqueue_style( 'directorist-unicons' );
             wp_enqueue_script( 'directorist-admin-script' );
@@ -302,6 +321,10 @@ class Asset_Loader {
             wp_enqueue_script( 'directorist-select2-script' );
             wp_enqueue_script( 'directorist-add-listing' );
             wp_enqueue_media();
+
+            if ( in_array( $pagenow, [ 'post.php', 'post-new.php' ], true ) && function_exists( 'wp_enqueue_editor' ) ) {
+                wp_enqueue_editor();
+            }
 
             wp_enqueue_script( 'iris', admin_url( 'js/iris.min.js' ), [ 'jquery-ui-draggable', 'jquery-ui-slider', 'jquery-touch-punch' ], Helper::get_script_version() );
             wp_enqueue_script( 'wp-color-picker', admin_url( 'js/color-picker.min.js' ), [ 'iris', 'wp-i18n' ], Helper::get_script_version() );
@@ -314,10 +337,35 @@ class Asset_Loader {
                 wp_add_inline_style( 'directorist-admin-style', Helper::dynamic_style() );
             }
         }
+
+        if ( 'at_biz_dir_page_directorist-orders' === $hook_suffix ) {
+            Enqueue::style( 'directorist/admin-order-dataview', 'build/css/admin/style-app', ['wp-components'] );
+            Enqueue::style( 'directorist/admin-app', 'build/css/admin/app' );
+            Enqueue::script( 'directorist/admin-order', 'build/js/react/admin/order' );
+        
+            $c_position = directorist_get_currency_position();
+            $currency   = directorist_get_currency();
+            $symbol     = atbdp_currency_symbol( $currency );
+        
+            wp_localize_script(
+                'directorist/admin-order', 'directorist_admin_order', [
+                    'symbol_position' => $c_position,
+                    'currency'        => $currency,
+                    'symbol'          => $symbol,
+                    'admin_url'       => admin_url(),
+                ]
+            );
+            wp_enqueue_style( 'directorist-admin-style' );
+        }
+
+        if ( 'at_biz_dir_page_directorist-notifications-pro-log' === $hook_suffix ) {
+            wp_enqueue_style( 'directorist-admin-style' );
+        }
     }
 
     public static function register_scripts() {
         Helper::register_all_scripts( Scripts::get_all_scripts() );
+        Enqueue::register_script( 'directorist-payment-receipt', 'build/js/react/frontend/payment-receipt.js', ['jquery', 'wp-api-fetch'] );
 
         // Inline styles
         if ( apply_filters( 'directorist_load_inline_style', true ) ) {

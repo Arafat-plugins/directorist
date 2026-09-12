@@ -36,6 +36,32 @@ class Builder_Data {
             ],
         ];
 
+        $badge_builder_widgets = \Directorist\Helper::badge_builder_widgets();
+        $badge_toggle_label    = static function( $widget_key, $fallback ) use ( $badge_builder_widgets ) {
+            if ( empty( $badge_builder_widgets[ $widget_key ]['label'] ) ) {
+                return $fallback;
+            }
+
+            return sprintf( __( 'Display %s', 'directorist' ), $badge_builder_widgets[ $widget_key ]['label'] );
+        };
+        $custom_badge_toggle_fields = [];
+
+        foreach ( \Directorist\Helper::custom_badge_definitions() as $badge_key => $badge ) {
+            $badge_widget_key = \Directorist\Helper::badge_widget_key( $badge_key );
+
+            if ( empty( $badge_widget_key ) ) {
+                continue;
+            }
+
+            $fallback_label = ! empty( $badge['internalName'] ) ? $badge['internalName'] : ( ! empty( $badge['label'] ) ? $badge['label'] : __( 'Custom badge', 'directorist' ) );
+
+            $custom_badge_toggle_fields[ $badge_widget_key ] = [
+                'type'  => "toggle",
+                'label' => $badge_toggle_label( $badge_widget_key, sprintf( __( 'Display %s', 'directorist' ), $fallback_label ) ),
+                'value' => false,
+            ];
+        }
+
         $single_listings_contents_widgets = [
             'preset_widgets' => [
                 'title'         => __( 'Preset Fields', 'directorist' ),
@@ -1186,9 +1212,15 @@ class Builder_Data {
                         'title'  => __( 'Listing Title Settings', 'directorist' ),
                         'fields' => [
                             'show_tagline' => [
-                                'type'  => 'toggle',
-                                'label' => __( 'Tagline', 'directorist' ),
-                                'value' => false,
+                                'type'    => 'toggle',
+                                'label'   => __( 'Tagline', 'directorist' ),
+                                'value'   => false,
+                                'show_if' => [
+                                    'where'      => 'submission_form_fields.value.fields',
+                                    'conditions' => [
+                                        ['key' => 'tagline.widget_name', 'compare' => '=', 'value' => 'tagline'],
+                                    ],
+                                ],
                             ],
                         ],
                     ],
@@ -1896,6 +1928,10 @@ class Builder_Data {
             ] 
         );
 
+        foreach ( $badge_builder_widgets as $badge_widget_key => $badge_widget ) {
+            $listing_card_widget[ $badge_widget_key ] = array_merge( $listing_card_widget[ $badge_widget_key ] ?? [], $badge_widget );
+        }
+
         $listing_card_conditional_widget = $listing_card_widget;
 
         if ( ! empty( $listing_card_conditional_widget['user_avatar'] ) ) {
@@ -1915,22 +1951,27 @@ class Builder_Data {
                     'maxWidget'         => 3,
                     'maxWidgetInfoText' => 'Up to __DATA__ item{s} can be added',
                     'acceptedWidgets'   => ['favorite_badge', 'popular_badge', 'featured_badge', 'new_badge'],
+                    "selectedWidgets" => ['favorite_badge'],
                 ],
                 'top_left'     => [
                     'maxWidget'       => 3,
                     'acceptedWidgets' => ['favorite_badge', 'popular_badge', 'featured_badge', 'new_badge'],
+                    "selectedWidgets" => ['popular_badge', 'featured_badge', 'new_badge'],
                 ],
                 'bottom_right' => [
                     'maxWidget'       => 2,
                     'acceptedWidgets' => ['favorite_badge', 'popular_badge', 'featured_badge', 'new_badge'],
+                    "selectedWidgets" => [],
                 ],
                 'bottom_left'  => [
                     'maxWidget'       => 3,
                     'acceptedWidgets' => ['favorite_badge', 'popular_badge', 'featured_badge', 'new_badge'],
+                    "selectedWidgets" => [],
                 ],
                 'avatar'       => [
                     'maxWidget'       => 1,
                     'acceptedWidgets' => ['user_avatar'],
+                    "selectedWidgets" => ['user_avatar'],
                 ],
             ],
 
@@ -1938,13 +1979,14 @@ class Builder_Data {
                 'top'     => [
                     'maxWidget'       => 0,
                     'acceptedWidgets' => [ 'listing_title', "rating", "pricing" ],
-                    "selectedWidgets" => [],
+                    "selectedWidgets" => ['listing_title', 'rating'],
                 ],
                 'bottom'  => [
                     'maxWidget'       => 0,
                     'acceptedWidgets' => [
                         'listings_location', 'phone', 'phone2', 'website', 'zip', 'fax', 'address', 'email', 'text', 'textarea', 'number', 'url', 'date', 'time', 'color', 'select', 'checkbox', 'radio', 'file', 'posted_date',
                     ],
+                    "selectedWidgets" => ['posted_date'],
                 ],
                 'excerpt' => [
                     'maxWidget'       => 1,
@@ -1967,14 +2009,40 @@ class Builder_Data {
                 'right' => [
                     'maxWidget'       => 2,
                     'acceptedWidgets' => ['category', 'favorite_badge', 'view_count'],
+                    "selectedWidgets" => ['view_count'],
                 ],
 
                 'left'  => [
                     'maxWidget'       => 1,
                     'acceptedWidgets' => ['category', 'favorite_badge', 'view_count'],
+                    "selectedWidgets" => ['category'],
                 ],
             ],
         ];
+
+        // Prepare default field assignments for the Search Form builder.
+        // $search_bar_default_fields contains widget keys referenced by the group layout,
+        // while $search_form_default_fields stores the widget config that populates `value.fields`.
+        $search_bar_default_fields = [];
+        $search_form_default_fields = [];
+        $preset_widgets = $search_form_widgets['available_widgets']['widgets'] ?? [];
+
+        if ( isset( $preset_widgets['title'] ) ) {
+            $search_bar_default_fields[] = 'title';
+
+            // Seed the Search Box widget with its metadata/options so Vue can render it immediately.
+            $search_form_default_fields['title'] = [
+                'widget_group' => 'available_widgets',
+                'widget_name'  => 'title',
+                'original_widget_key' => 'title',
+            ];
+
+            if ( isset( $preset_widgets['title']['options'] ) && is_array( $preset_widgets['title']['options'] ) ) {
+                foreach ( $preset_widgets['title']['options'] as $option_key => $option_args ) {
+                    $search_form_default_fields['title'][ $option_key ] = isset( $option_args['value'] ) ? $option_args['value'] : '';
+                }
+            }
+        }
 
         $listing_card_grid_view_without_thumbnail_layout = [
             'body'   => [
@@ -1983,24 +2051,28 @@ class Builder_Data {
                     'maxWidget'         => 1,
                     'maxWidgetInfoText' => 'Up to __DATA__ item{s} can be added',
                     'acceptedWidgets' => [ 'user_avatar' ],
+                    "selectedWidgets" => ['user_avatar'],
                 ],
                 'title'         => [
                     'maxWidget'       => 1,
                     'acceptedWidgets' => ['listing_title'],
-                    "selectedWidgets" => [],
+                    "selectedWidgets" => ['listing_title'],
                 ],
                 'quick_actions' => [
                     'maxWidget'       => 3,
                     'acceptedWidgets' => ['favorite_badge', 'popular_badge', 'featured_badge', 'new_badge'],
+                    "selectedWidgets" => ['favorite_badge'],
                 ],
                 'quick_info'    => [
                     'acceptedWidgets' => ['rating', 'pricing'],
+                    "selectedWidgets" => ['rating'],
                 ],
                 'bottom'        => [
                     'maxWidget'       => 0,
                     'acceptedWidgets' => [
                         'listings_location', 'phone', 'phone2', 'website', 'zip', 'fax', 'address', 'email', 'text', 'textarea', 'number', 'url', 'date', 'time', 'color', 'select', 'checkbox', 'radio', 'file', 'posted_date',
                     ],
+                    "selectedWidgets" => ['posted_date'],
                 ],
                 'excerpt'       => [
                     'maxWidget'       => 1,
@@ -2023,11 +2095,13 @@ class Builder_Data {
                 'right' => [
                     'maxWidget'       => 2,
                     'acceptedWidgets' => ['category', 'favorite_badge', 'view_count'],
+                    "selectedWidgets" => ['view_count'],
                 ],
 
                 'left'  => [
                     'maxWidget'       => 2,
                     'acceptedWidgets' => ['category', 'favorite_badge', 'view_count'],
+                    "selectedWidgets" => ['category'],
                 ],
             ],
         ];
@@ -2039,6 +2113,7 @@ class Builder_Data {
                     'maxWidget'         => 3,
                     'maxWidgetInfoText' => 'Up to __DATA__ item{s} can be added',
                     'acceptedWidgets'   => ['popular_badge', 'featured_badge', 'new_badge'],
+                    "selectedWidgets" => ['popular_badge', 'featured_badge', 'new_badge'],
                 ],
             ],
 
@@ -2048,13 +2123,14 @@ class Builder_Data {
                     'maxWidget'         => 0,
                     'maxWidgetInfoText' => 'Up to __DATA__ item{s} can be added',
                     'acceptedWidgets' => ['listing_title', 'rating', 'pricing'],
-                    "selectedWidgets" => [],
+                    "selectedWidgets" => ['listing_title', 'rating'],
                 ],
                 'right'   => [
                     'label'             => __( 'Body Right', 'directorist' ),
                     'maxWidget'         => 2,
                     'maxWidgetInfoText' => 'Up to __DATA__ item{s} can be added',
                     'acceptedWidgets'   => ['favorite_badge', 'popular_badge', 'featured_badge', 'new_badge'],
+                    "selectedWidgets" => ['favorite_badge'],
                 ],
                 'bottom'  => [
                     'label'           => __( 'Body Bottom', 'directorist' ),
@@ -2062,6 +2138,7 @@ class Builder_Data {
                     'acceptedWidgets' => [
                         'listings_location', 'phone', 'phone2', 'website', 'zip', 'fax', 'address', 'email', 'text', 'textarea', 'number', 'url', 'date', 'time', 'color', 'select', 'checkbox', 'radio', 'file', 'posted_date',
                     ],
+                    "selectedWidgets" => ['posted_date'],
                 ],
                 'excerpt' => [
                     'maxWidget'       => 1,
@@ -2084,11 +2161,13 @@ class Builder_Data {
                 'right' => [
                     'maxWidget'       => 2,
                     'acceptedWidgets' => ['user_avatar', 'category', 'favorite_badge', 'view_count'],
+                    "selectedWidgets" => ['view_count'],
                 ],
 
                 'left'  => [
                     'maxWidget'       => 1,
                     'acceptedWidgets' => ['category', 'favorite_badge', 'view_count'],
+                    "selectedWidgets" => ['category'],
                 ],
             ],
         ];
@@ -2100,13 +2179,14 @@ class Builder_Data {
                     'maxWidget'         => 0,
                     'maxWidgetInfoText' => 'Up to __DATA__ item{s} can be added',
                     'acceptedWidgets'   => ['listing_title', 'rating', 'pricing'],
-                    "selectedWidgets"   => [],
+                    "selectedWidgets"   => ['listing_title', 'rating'],
                 ],
                 'right'   => [
                     'label'             => __( 'Body Right', 'directorist' ),
                     'maxWidget'         => 3,
                     'maxWidgetInfoText' => 'Up to __DATA__ item{s} can be added',
                     'acceptedWidgets'   => ['favorite_badge', 'popular_badge', 'featured_badge', 'new_badge'],
+                    "selectedWidgets" => ['favorite_badge'],
                 ],
                 'bottom'  => [
                     'label'           => __( 'Body Bottom', 'directorist' ),
@@ -2114,6 +2194,7 @@ class Builder_Data {
                     'acceptedWidgets' => [
                         'listings_location', 'phone', 'phone2', 'website', 'zip', 'fax', 'address', 'email', 'text', 'textarea', 'number', 'url', 'date', 'time', 'color', 'select', 'checkbox', 'radio', 'file', 'posted_date',
                     ],
+                    "selectedWidgets" => ['posted_date'],
                 ],
                 'excerpt' => [
                     'maxWidget'       => 1,
@@ -2136,11 +2217,13 @@ class Builder_Data {
                 'right' => [
                     'maxWidget'       => 2,
                     'acceptedWidgets' => ['user_avatar', 'category', 'favorite_badge', 'view_count'],
+                    "selectedWidgets" => ['view_count'],
                 ],
 
                 'left'  => [
                     'maxWidget'       => 1,
                     'acceptedWidgets' => ['category', 'favorite_badge', 'view_count'],
+                    "selectedWidgets" => ['category'],
                 ],
             ],
         ];
@@ -2163,7 +2246,7 @@ class Builder_Data {
                 'icon' => [
                     'label'       => '',
                     'type'        => 'icon',
-                    'value'       => '',
+                    'value'       => 'las la-home',
                     'placeholder' => __( 'las la-home', 'directorist' ),
                     'rules'       => [
                         'required' => false,
@@ -2473,13 +2556,15 @@ class Builder_Data {
                     ],
                     'widgets'         => $search_form_widgets,
                     'value'           => [
+                        // Preload the Search Box widget when it exists in preset widgets.
+                        'fields' => $search_form_default_fields,
                         'groups' => [
                             [
                                 'label'     => __( 'Search Bar', 'directorist' ), 
                                 'lock'      => true,
                                 'draggable' => false,
                                 'type'      => 'general_group',
-                                'fields'    => [],
+                                'fields'    => $search_bar_default_fields,
                             ],
                             [
                                 'label'     => __( 'Search Filter', 'directorist' ),
@@ -2702,23 +2787,23 @@ class Builder_Data {
                                 'icon' => 'la la-circle-notch',
                                 'options' => [
                                     'title' => __( "Badge Settings", "directorist" ),
-                                    'fields' => [
+                                    'fields' => array_merge( [
                                         'new_badge' => [
                                             'type' => "toggle",
-                                            'label' => __( "Display New Badge", "directorist" ),
+                                            'label' => $badge_toggle_label( 'new_badge', __( "Display New Badge", "directorist" ) ),
                                             'value' => true,
                                         ],
                                         'popular_badge' => [
                                             'type' => "toggle",
-                                            'label' => __( "Display Popular Badge", "directorist" ),
+                                            'label' => $badge_toggle_label( 'popular_badge', __( "Display Popular Badge", "directorist" ) ),
                                             'value' => true,
                                         ],
                                         'featured_badge' => [
                                             'type' => "toggle",
-                                            'label' => __( "Display Featured Badge", "directorist" ),
+                                            'label' => $badge_toggle_label( 'featured_badge', __( "Display Featured Badge", "directorist" ) ),
                                             'value' => true,
                                         ],
-                                    ],
+                                    ], $custom_badge_toggle_fields ),
                                 ],
                             ],
                             'ratings_count' => [
@@ -3149,6 +3234,8 @@ class Builder_Data {
         self::$fields = apply_filters( 'directorist/builder/fields', self::$fields );
 
         self::$layouts = apply_filters( 'directorist/builder/layouts', self::$layouts );
+        self::append_custom_badge_widgets_to_accepted_slots( self::$fields );
+        self::append_custom_badge_widgets_to_accepted_slots( self::$layouts );
 
         // Conditional Fields
         // -----------------------------
@@ -3243,6 +3330,32 @@ class Builder_Data {
         }
 
         return $options;
+    }
+
+    protected static function append_custom_badge_widgets_to_accepted_slots( &$data ) {
+        $custom_badge_keys = array_keys( \Directorist\Helper::custom_badge_definitions() );
+
+        if ( empty( $custom_badge_keys ) || ! is_array( $data ) ) {
+            return;
+        }
+
+        $core_badge_keys = [ 'popular_badge', 'featured_badge', 'new_badge' ];
+
+        self::append_badge_widgets_to_accepted_slots( $data, $custom_badge_keys, $core_badge_keys );
+    }
+
+    protected static function append_badge_widgets_to_accepted_slots( &$data, $custom_badge_keys, $core_badge_keys ) {
+        if ( ! is_array( $data ) ) {
+            return;
+        }
+
+        if ( ! empty( $data['acceptedWidgets'] ) && is_array( $data['acceptedWidgets'] ) && array_intersect( $core_badge_keys, $data['acceptedWidgets'] ) ) {
+            $data['acceptedWidgets'] = array_values( array_unique( array_merge( $data['acceptedWidgets'], $custom_badge_keys ) ) );
+        }
+
+        foreach ( $data as &$value ) {
+            self::append_badge_widgets_to_accepted_slots( $value, $custom_badge_keys, $core_badge_keys );
+        }
     }
 
     public function get_fields() {

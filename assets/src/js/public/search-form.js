@@ -933,28 +933,53 @@ document.addEventListener('DOMContentLoaded', () => {
 				}, 300);
 
 				// Reset search form values
-				if (this.closest('.directorist-contents-wrap')) {
-					let searchForm = this.closest(
-						'.directorist-contents-wrap'
-					).querySelector('.directorist-search-form');
+				const resetTargets = new Set();
+				const searchModal = this.closest('.directorist-search-modal');
+
+				if (searchModal) {
+					resetTargets.add(searchModal);
+					searchModal
+						.querySelectorAll("input[type='checkbox'], input[type='radio']")
+						.forEach((input) => {
+							input.checked = false;
+							input
+								.closest('.directorist-search-field')
+								?.classList.remove('input-has-value', 'input-is-focused');
+						});
+					searchModal.querySelectorAll('select').forEach((select) => {
+						select.selectedIndex = 0;
+						select
+							.closest('.directorist-search-field')
+							?.classList.remove('input-has-value', 'input-is-focused');
+						$(select).trigger('change');
+					});
+				}
+
+				const contentsWrap = this.closest('.directorist-contents-wrap');
+				if (contentsWrap) {
+					let searchForm = contentsWrap.querySelector(
+						'.directorist-search-form'
+					);
 					if (searchForm) {
-						adsFormReset(searchForm);
+						resetTargets.add(searchForm);
 					}
 
-					let advanceSearchForm = this.closest(
-						'.directorist-contents-wrap'
-					).querySelector('.directorist-advanced-filter__form');
+					let advanceSearchForm = contentsWrap.querySelector(
+						'.directorist-advanced-filter__form'
+					);
 					if (advanceSearchForm) {
-						adsFormReset(advanceSearchForm);
+						resetTargets.add(advanceSearchForm);
 					}
 
-					let advanceSearchFilter = this.closest(
-						'.directorist-contents-wrap'
-					).querySelector('.directorist-advanced-filter__advanced');
+					let advanceSearchFilter = contentsWrap.querySelector(
+						'.directorist-advanced-filter__advanced'
+					);
 					if (advanceSearchFilter) {
-						adsFormReset(advanceSearchFilter);
+						resetTargets.add(advanceSearchFilter);
 					}
 				}
+
+				resetTargets.forEach(adsFormReset);
 			});
 		}
 
@@ -1493,11 +1518,104 @@ document.addEventListener('DOMContentLoaded', () => {
 
 		initSearchCategoryCustomFields($);
 
+		let isHandlingBackButton = false;
+		let backButtonTouchStart = null;
+		const touchMoveThreshold = 10;
+
+		const getTouchPoint = (e) => {
+			const touches =
+				e.originalEvent.changedTouches || e.originalEvent.touches || [];
+
+			if (!touches.length) {
+				return null;
+			}
+
+			return {
+				x: touches[0].clientX,
+				y: touches[0].clientY,
+			};
+		};
+
+		const didTouchMove = (touchEnd) => {
+			return (
+				Math.abs(touchEnd.x - backButtonTouchStart.x) >
+					touchMoveThreshold ||
+				Math.abs(touchEnd.y - backButtonTouchStart.y) >
+					touchMoveThreshold
+			);
+		};
+
+		const shouldIgnoreTouchEnd = (e, element) => {
+			if (e.type !== 'touchend') {
+				return false;
+			}
+
+			const touchEnd = getTouchPoint(e);
+
+			if (
+				!backButtonTouchStart ||
+				!touchEnd ||
+				backButtonTouchStart.element !== element
+			) {
+				backButtonTouchStart = null;
+				return true;
+			}
+
+			const moved = didTouchMove(touchEnd);
+			backButtonTouchStart = null;
+
+			return moved;
+		};
+
 		// Back Button to go back to the previous page
-		$('body').on('click', '.directorist-btn__back', function (e) {
+		$('body').on('touchstart', '.directorist-btn__back', function (e) {
+			const touchStart = getTouchPoint(e);
+
+			if (!touchStart) {
+				backButtonTouchStart = null;
+				return;
+			}
+
+			backButtonTouchStart = {
+				x: touchStart.x,
+				y: touchStart.y,
+				element: this,
+			};
+		});
+
+		$('body').on('click touchend', '.directorist-btn__back', function (e) {
+			if (shouldIgnoreTouchEnd(e, this)) {
+				return;
+			}
+
 			e.preventDefault();
+			e.stopImmediatePropagation();
+
+			if (isHandlingBackButton) {
+				return;
+			}
+
+			isHandlingBackButton = true;
+			const currentUrl = window.location.href;
+			const fallbackUrl = this.href;
 
 			window.history.back();
+
+			if (
+				fallbackUrl &&
+				fallbackUrl !== '#' &&
+				fallbackUrl !== currentUrl
+			) {
+				setTimeout(() => {
+					if (window.location.href === currentUrl) {
+						window.location.href = fallbackUrl;
+					}
+				}, 300);
+			}
+
+			setTimeout(() => {
+				isHandlingBackButton = false;
+			}, 1000);
 		});
 
 		// Radius Search Field Hide on Empty Location Field
@@ -1513,14 +1631,12 @@ document.addEventListener('DOMContentLoaded', () => {
 			).val();
 
 			// Determine which search item selector to use
-			if (radius_search_based_on === 'address') {
-				radius_search_item_selector = '.directorist-location-js';
-			} else if (radius_search_based_on === 'zip') {
+			if (radius_search_based_on === 'zip') {
 				radius_search_item_selector =
 					'.directorist-zipcode-search .zip-radius-search';
 			} else {
-				// Default fallback
-				radius_search_item_selector = '.directorist-location-js';
+				// Default fallback for address and others
+				radius_search_item_selector = $('.directorist-location-js').length ? '.directorist-location-js' : '.directorist-location-select';
 			}
 
 			// Check if radius search item selector elements exist
@@ -1553,7 +1669,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		// handleRadiusVisibility Trigger
 		$('body').on(
 			'keyup keydown input change focus',
-			'.directorist-location-js, .zip-radius-search',
+			'.directorist-location-js, .directorist-location-select, .zip-radius-search',
 			function (e) {
 				handleRadiusVisibility();
 			}
@@ -1607,6 +1723,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 			zipcode_search.find('.zip-cityLat').val(lat);
 			zipcode_search.find('.zip-cityLng').val(lon);
+			zipcode_search.trigger('change');
 
 			$('.directorist-country').hide();
 		});
@@ -2430,12 +2547,14 @@ document.addEventListener('DOMContentLoaded', () => {
 							zipcode_search.find('.error_message').remove();
 							zipcode_search.find('.zip-cityLat').val(data.lat);
 							zipcode_search.find('.zip-cityLng').val(data.lng);
+							zipcode_search.trigger('change');
 						} else {
 							if (data.length === 1) {
 								var lat = data[0].lat;
 								var lon = data[0].lon;
 								zipcode_search.find('.zip-cityLat').val(lat);
 								zipcode_search.find('.zip-cityLng').val(lon);
+								zipcode_search.trigger('change');
 							} else {
 								for (let i = 0; i < data.length; i++) {
 									let country =
